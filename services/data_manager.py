@@ -48,7 +48,9 @@ def load_library(uploaded_file=None) -> pd.DataFrame:
     3. Dati di esempio
     """
     if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file)
+        df = pd.read_csv(uploaded_file,encoding="latin-1", quotechar='"',
+            on_bad_lines="skip",
+            engine="python")
     elif DATA_PATH.exists():
         df = pd.read_csv(DATA_PATH)
     elif SAMPLE_PATH.exists():
