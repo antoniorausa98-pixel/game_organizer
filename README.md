@@ -52,7 +52,7 @@ IGDB_CLIENT_SECRET=...
 ### 3. Avvia l'app
 
 ```bash
-streamlit run app.py
+python -m streamlit run app.py
 ```
 
 L'app si aprirà su `http://localhost:8501`

@@ -48,9 +48,23 @@ def load_library(uploaded_file=None) -> pd.DataFrame:
     3. Dati di esempio
     """
     if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file,encoding="latin-1", quotechar='"',
-            on_bad_lines="skip",
-            engine="python")
+        for encoding in ("utf-8", "latin-1"):
+            try:
+                uploaded_file.seek(0)
+                raw = uploaded_file.read(2048).decode(encoding, errors="replace")
+                sep = ";" if raw.count(";") > raw.count(",") else ","
+                uploaded_file.seek(0)
+                df = pd.read_csv(
+                    uploaded_file,
+                    encoding=encoding,
+                    sep=sep,
+                    quotechar='"',
+                    on_bad_lines="skip",
+                    engine="python"
+                )
+                break
+            except UnicodeDecodeError:
+                continue
     elif DATA_PATH.exists():
         df = pd.read_csv(DATA_PATH)
     elif SAMPLE_PATH.exists():
@@ -168,9 +182,11 @@ def df_to_context(df: pd.DataFrame, max_games: int = 80) -> str:
         if row.get("platform"): parts.append(f"({row['platform']})")
         if row.get("status"): parts.append(f"[{row['status']}]")
         if row.get("genre"): parts.append(f"Genre: {row['genre']}")
-        if pd.notna(row.get("personal_rating")) and row.get("personal_rating") != "":
-            parts.append(f"Voto: {row['personal_rating']}/10")
-        if row.get("hltb_main") and pd.notna(row.get("hltb_main")):
-            parts.append(f"~{row['hltb_main']:.0f}h")
+        rating = row.get("personal_rating")
+        if rating is not None and pd.notna(rating):
+            parts.append(f"Voto: {rating}/10")
+        hltb = row.get("hltb_main")
+        if hltb is not None and pd.notna(hltb):
+            parts.append(f"~{hltb:.0f}h")
         lines.append(" ".join(parts))
     return "\n".join(lines)

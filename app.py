@@ -255,11 +255,12 @@ if search_query:
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAIN CONTENT - Tab navigation
 # ═══════════════════════════════════════════════════════════════════════════════
-tab_library, tab_stats, tab_detail, tab_add, tab_ai = st.tabs([
+tab_library, tab_stats, tab_detail, tab_add, tab_enrich, tab_ai = st.tabs([
     "📚 Libreria",
     "📊 Statistiche",
     "🔍 Dettaglio",
     "➕ Aggiungi",
+    "🚀 Arricchisci",
     "🤖 AI Assistant"
 ])
 
@@ -479,28 +480,35 @@ with tab_detail:
 
         col_info, col_api = st.columns([1, 1])
 
+        # Helper per valori pandas NA-safe
+        def safe_val(row, key, default=None):
+            v = row.get(key, default)
+            return default if v is None or (hasattr(v, '__class__') and v.__class__.__name__ == 'NAType') or (isinstance(v, float) and pd.isna(v)) else v
+
         with col_info:
             st.markdown(f"## {game_row['title']}")
             st.markdown(f"""
 | Campo | Valore |
 |-------|--------|
-| 🏢 Piattaforma | {game_row.get('platform', '—')} |
-| 📊 Stato | {game_row.get('status', '—')} |
-| 🎯 Genere | {game_row.get('genre', '—')} |
-| 📅 Anno | {game_row.get('year', '—')} |
-| ⭐ Voto personale | {game_row.get('personal_rating', '—')}/10 |
+| 🏢 Piattaforma | {safe_val(game_row, 'platform', '—')} |
+| 📊 Stato | {safe_val(game_row, 'status', '—')} |
+| 🎯 Genere | {safe_val(game_row, 'genre', '—')} |
+| 📅 Anno | {safe_val(game_row, 'year', '—')} |
+| ⭐ Voto personale | {safe_val(game_row, 'personal_rating', '—')}/10 |
 """)
 
-            if game_row.get("notes"):
-                st.markdown(f"**Note:** {game_row['notes']}")
+            notes_val = safe_val(game_row, "notes", "")
+            if notes_val:
+                st.markdown(f"**Note:** {notes_val}")
 
             # Modifica rapida
             with st.expander("✏️ Modifica"):
+                cur_status = safe_val(game_row, "status", "Backlog")
                 new_status = st.selectbox("Stato", STATUSES,
-                    index=STATUSES.index(game_row.get("status", "Backlog")) if game_row.get("status") in STATUSES else 0)
-                new_rating = st.slider("Voto", 0.0, 10.0,
-                    float(game_row.get("personal_rating", 0) or 0), 0.5)
-                new_notes = st.text_area("Note", value=game_row.get("notes", ""))
+                    index=STATUSES.index(cur_status) if cur_status in STATUSES else 0)
+                cur_rating = safe_val(game_row, "personal_rating", 0)
+                new_rating = st.slider("Voto", 0.0, 10.0, float(cur_rating or 0), 0.5)
+                new_notes = st.text_area("Note", value=safe_val(game_row, "notes", ""))
 
                 if st.button("💾 Salva modifiche"):
                     st.session_state.library = update_game(
@@ -530,9 +538,10 @@ with tab_detail:
                                     "rawg_rating": rawg_data.get("rawg_rating"),
                                     "metacritic": rawg_data.get("metacritic"),
                                     "developer": rawg_data.get("developer", ""),
+                                    "year": int(rawg_data["release_year"]) if rawg_data.get("release_year") and pd.isna(game_row.get("year")) else game_row.get("year"),
+                                    "genre": rawg_data["genres"][0] if rawg_data.get("genres") and not game_row.get("genre") else game_row.get("genre"),
                                 }
                             )
-                            # Salva dati extra in session per display
                             st.session_state[f"rawg_{selected_title}"] = rawg_data
                             df = st.session_state.library
                             game_row = df.iloc[game_idx]
@@ -545,31 +554,33 @@ with tab_detail:
             # Mostra dati RAWG extra se disponibili
             rawg_extra = st.session_state.get(f"rawg_{selected_title}", {})
 
-            if game_row.get("cover_url"):
-                st.image(game_row["cover_url"], width=200)
+            cover = safe_val(game_row, "cover_url", "")
+            if cover:
+                st.image(cover, width=200)
 
-            if game_row.get("summary"):
-                st.markdown(game_row["summary"][:400] + ("..." if len(str(game_row.get("summary",""))) > 400 else ""))
+            summary = safe_val(game_row, "summary", "")
+            if summary:
+                st.markdown(str(summary)[:400] + ("..." if len(str(summary)) > 400 else ""))
 
             col_r1, col_r2 = st.columns(2)
             with col_r1:
-                mc = game_row.get("metacritic") or rawg_extra.get("metacritic")
-                rr = game_row.get("rawg_rating") or rawg_extra.get("rawg_rating")
-                if mc and pd.notna(mc):
+                mc = safe_val(game_row, "metacritic") or rawg_extra.get("metacritic")
+                rr = safe_val(game_row, "rawg_rating") or rawg_extra.get("rawg_rating")
+                if mc:
                     st.metric("🎮 Metacritic", f"{int(mc)}/100")
-                elif rr and pd.notna(rr):
+                elif rr:
                     st.metric("⭐ RAWG Rating", f"{rr}/5")
             with col_r2:
                 if rawg_extra.get("playtime_avg"):
                     st.metric("⏱️ Durata media", f"~{rawg_extra['playtime_avg']}h")
 
-            if game_row.get("developer"):
-                st.caption(f"🏭 {game_row['developer']}")
+            dev = safe_val(game_row, "developer", "")
+            if dev:
+                st.caption(f"🏭 {dev}")
             if rawg_extra.get("publisher"):
                 st.caption(f"📦 {rawg_extra['publisher']}")
             if rawg_extra.get("tags"):
-                tags_str = " · ".join(rawg_extra["tags"][:6])
-                st.caption(f"🏷️ {tags_str}")
+                st.caption(f"🏷️ {' · '.join(rawg_extra['tags'][:6])}")
 
             # Dati HLTB
             st.markdown("#### ⏱️ HowLongToBeat")
@@ -642,11 +653,8 @@ with tab_add:
     st.markdown("---")
     st.markdown("### 📋 Import Massivo")
     st.markdown("""
-Puoi importare più giochi da file CSV. Il file deve avere queste colonne:
-`title, platform, status, genre, year, personal_rating, notes`
-
-**Come esportare da Steam:** Usa [Steam export tool](https://www.lorenzostanco.com/lab/steam/) o esporta manualmente.
-**Da GOG:** Galaxy > Esporta libreria.
+Puoi importare più giochi da file CSV. Il file deve avere almeno le colonne `title` e `platform`.
+Il separatore può essere `,` o `;` (Excel italiano) — viene rilevato automaticamente.
 """)
     bulk_upload = st.file_uploader(
         "Carica CSV giochi",
@@ -656,7 +664,7 @@ Puoi importare più giochi da file CSV. Il file deve avere queste colonne:
     )
     if bulk_upload:
         try:
-            new_df = pd.read_csv(bulk_upload)
+            new_df = load_library(bulk_upload)
             merged = pd.concat([df, new_df], ignore_index=True).drop_duplicates(subset=["title", "platform"])
             st.session_state.library = merged
             save_library(merged)
@@ -665,9 +673,101 @@ Puoi importare più giochi da file CSV. Il file deve avere queste colonne:
         except Exception as e:
             st.error(f"Errore nel file: {e}")
 
+    # ── Arricchimento massivo ──────────────────────────────────────────────────
+    st.info("👉 Vai al tab **🚀 Arricchisci** per scaricare automaticamente copertine, generi, anni e tempi di completamento per tutti i giochi.")
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 5: AI ASSISTANT
+# TAB 5: ARRICCHISCI
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab_enrich:
+    st.markdown("### 🚀 Arricchisci tutta la libreria")
+    st.markdown("Scarica automaticamente **copertine, descrizioni, anno, genere, Metacritic** (RAWG) e **tempi di completamento** (HowLongToBeat) per tutti i giochi in un colpo solo.")
+
+    col_e1, col_e2, col_e3 = st.columns(3)
+    with col_e1:
+        do_rawg = st.checkbox("🌐 RAWG", value=True, disabled=not rawg.available,
+            help="Copertina, descrizione, Metacritic, anno, genere" if rawg.available else "Configura RAWG_API_KEY")
+    with col_e2:
+        do_hltb = st.checkbox("⏱️ HowLongToBeat", value=True,
+            help="Tempi di completamento")
+    with col_e3:
+        only_missing = st.checkbox("Solo giochi senza dati", value=True,
+            help="Salta i giochi che hanno già le info")
+
+    total_lib = len(st.session_state.library)
+    st.caption(f"Libreria attuale: **{total_lib} giochi**")
+
+    if not rawg.available and not do_hltb:
+        st.warning("Configura almeno una API (RAWG o HLTB) per procedere.")
+    elif st.button("▶️ Avvia arricchimento", type="primary", use_container_width=True):
+        working_df = st.session_state.library.copy()
+
+        if only_missing:
+            if do_rawg and do_hltb:
+                mask = working_df["cover_url"].fillna("").eq("") | working_df["hltb_main"].isna()
+            elif do_rawg:
+                mask = working_df["cover_url"].fillna("").eq("")
+            else:
+                mask = working_df["hltb_main"].isna()
+            to_process = working_df[mask].index.tolist()
+        else:
+            to_process = working_df.index.tolist()
+
+        total = len(to_process)
+        if total == 0:
+            st.info("✅ Tutti i giochi hanno già i dati richiesti!")
+        else:
+            progress_bar = st.progress(0, text=f"0/{total} giochi processati...")
+            status_box = st.empty()
+            errors = []
+
+            for i, idx in enumerate(to_process):
+                title = working_df.at[idx, "title"]
+                status_box.markdown(f"🔍 **{title}**")
+
+                if do_rawg:
+                    try:
+                        rawg_data = rawg.search_game(title)
+                        if rawg_data:
+                            working_df.at[idx, "cover_url"] = rawg_data.get("cover_url", "")
+                            working_df.at[idx, "summary"] = rawg_data.get("summary", "")
+                            working_df.at[idx, "rawg_rating"] = rawg_data.get("rawg_rating")
+                            working_df.at[idx, "metacritic"] = rawg_data.get("metacritic")
+                            working_df.at[idx, "developer"] = rawg_data.get("developer", "")
+                            if rawg_data.get("release_year") and pd.isna(working_df.at[idx, "year"]):
+                                working_df.at[idx, "year"] = int(rawg_data["release_year"])
+                            if rawg_data.get("genres") and not working_df.at[idx, "genre"]:
+                                working_df.at[idx, "genre"] = rawg_data["genres"][0]
+                    except Exception as e:
+                        errors.append(f"{title} (RAWG): {e}")
+
+                if do_hltb:
+                    try:
+                        hltb_data = hltb.search(title)
+                        if hltb_data:
+                            working_df.at[idx, "hltb_main"] = hltb_data.get("main_story")
+                            working_df.at[idx, "hltb_extra"] = hltb_data.get("main_extra")
+                            working_df.at[idx, "hltb_completionist"] = hltb_data.get("completionist")
+                    except Exception as e:
+                        errors.append(f"{title} (HLTB): {e}")
+
+                progress_bar.progress((i + 1) / total,
+                    text=f"{i+1}/{total} giochi processati...")
+
+            st.session_state.library = working_df
+            save_library(working_df)
+            status_box.empty()
+            st.success(f"✅ Completato! {total} giochi aggiornati.")
+            if errors:
+                with st.expander(f"⚠️ {len(errors)} errori"):
+                    for e in errors:
+                        st.caption(e)
+            st.rerun()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 6: AI ASSISTANT
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab_ai:
     st.markdown("### 🤖 GamePal — Il tuo assistente AI")
