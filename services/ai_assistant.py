@@ -28,7 +28,7 @@ Puoi rispondere a domande come:
 
 class AIAssistant:
     def __init__(self):
-        api_key = os.getenv("GEMINI_API_KEY", "")
+        api_key = os.getenv("GOOGLLE_API_KEY", "")
         self.available = bool(api_key)
         if self.available:
             genai.configure(api_key=api_key)
