@@ -142,6 +142,12 @@ hltb: HLTBService = st.session_state.hltb
 ai: AIAssistant = st.session_state.ai
 
 
+def autosave(new_df=None):
+    """Salva automaticamente la libreria su data/my_games.csv."""
+    target = new_df if new_df is not None else st.session_state.library
+    save_library(target)
+
+
 # ─── Helper ───────────────────────────────────────────────────────────────────
 STATUS_EMOJI = {
     "Playing": "🟢",
@@ -183,7 +189,8 @@ with st.sidebar:
     if uploaded:
         st.session_state.library = load_library(uploaded)
         df = st.session_state.library
-        st.success(f"✅ Caricati {len(df)} giochi!")
+        save_library(df)
+        st.success(f"✅ Caricati {len(df)} giochi! Salvati in `data/my_games.csv`")
 
     if st.button("📥 Usa dati di esempio", use_container_width=True):
         st.session_state.library = load_library()
@@ -229,12 +236,11 @@ with st.sidebar:
     if not rawg.available or not ai.available:
         with st.expander("Come configurare"):
             st.markdown("""
-1. Copia `.env.example` in `.env`
-2. Aggiungi le tue API key
-3. Riavvia l'app
+1. Aggiungi i secret nel tuo Codespace
+2. Riavvia il Codespace
 
-**RAWG**: Registrati su [rawg.io/apidocs](https://rawg.io/apidocs) — gratis, nessun OAuth!
-**AI**: Prendi la key su [console.anthropic.com](https://console.anthropic.com)
+**RAWG**: Registrati su [rawg.io/apidocs](https://rawg.io/apidocs) — gratis!
+**Gemini**: Ottieni la key su [aistudio.google.com](https://aistudio.google.com/app/apikey) — gratis!
 """)
 
 
@@ -515,6 +521,7 @@ with tab_detail:
                         df, game_idx,
                         {"status": new_status, "personal_rating": new_rating, "notes": new_notes}
                     )
+                    autosave()
                     st.success("✅ Salvato!")
                     st.rerun()
 
